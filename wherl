@@ -1,0 +1,109 @@
+#!/usr/bin/env escript
+-export([main/1]).
+
+main(Something) when is_list(Something) ->
+    [Command | Args] = Something,
+    case Command of
+	"new" ->
+	    handle(Command, Args);
+	_ ->
+	    case app_created() of
+		true ->
+		    handle(Command, Args);
+		false ->
+		    io:format("You must create an app before you can do anything else.~n\tusage: wherl new <name> <abbreviation>~n",[]).	
+
+main(_) ->
+    io:format("usage: wherl generate <command> <argument>~n",[]).	
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+handle("new", Args) ->
+    
+    case (length(Args)) of
+	1 ->
+	    [App] = Args,
+	    io:format("creating new app ~s~n",[App]);
+	2 ->  
+	    [App | Rest] = Args,
+	    [Abbrev] = Rest,
+	    io:format("creating new app ~s with abbrev ~s~n",[App, Abbrev]);
+	_ ->
+	    io:format("usage: wherl new <name> <abbreviation>~n \tname: name of the application~n \tabbreviation: since erlang is not namespaced, a short (1-4 character) prefix can be appended to each module to avoid name clashes.~n",[]) %
+    end;
+
+handle("generate", ["controller" | Rest]) ->
+    case (length(Rest) == 1) of
+	true ->
+	    Name = string:strip(Rest),
+	    io:format("generating controller ~s~n",[Name]);
+	false ->	
+	    io:format("usage: wherl generate controller <name>~n",[])
+    end;
+
+handle("generate", ["model" | Rest]) ->
+    case (length(Rest) == 1) of
+	true ->
+	    Name = string:strip(Rest),
+	    io:format("generating model ~p~n",[Name]),
+	    model(Name);
+	false ->	
+	    io:format("usage: wherl generate model <name>~n",[])
+    end;
+
+handle("generate", [Rest]) ->
+    case (length(Rest) == 1) of
+	true ->
+	    Name = string:strip(Rest),
+	    io:format("generating model and controller ~s~n",[Name]);
+	false ->	
+	    io:format("usage: wherl generate <name>~n",[])
+    end.
+
+%%%===================================================================
+%%% Template generation
+%%%===================================================================
+model(Model) ->
+    Properties = [{name, Model}],
+    TemplateFileName = "model.tmp",
+    Data = template(TemplateFileName, Properties),
+    SubDir = "src",
+    FileName = Model ++ ".erl",
+    ModelFile = create_file(SubDir, FileName),
+    file:write(ModelFile, Data),
+    io:format("~s~n",[Data]).
+
+
+%%%===================================================================
+%%% Utility functions
+%%%===================================================================
+template(TemplateFileName, Properties) ->
+    CurrentDirectory = filename:dirname(escript:script_name()),
+    true = code:add_pathz(CurrentDirectory ++ "/include/sgte/ebin/"),
+    FileName = lists:flatten([CurrentDirectory, "/templates/", TemplateFileName]),
+    {ok, Compiled} = sgte:compile_file(FileName),
+    sgte:render_bin(Compiled, Properties).
+
+create_file(SubDir, FileName) ->
+    CurrentDirectory = filename:dirname(escript:script_name()),
+    AppName = app_name(CurrentDirectory),
+    AppDirectory = lists:flatten([CurrentDirectory, "/", AppName]),
+    file:make_dir(AppDirectory),
+    SubDirectory = lists:flatten([AppDirectory, "/", SubDir]),
+    file:make_dir(SubDirectory),
+    FileFullName = lists:flatten([SubDirectory, "/", FileName]),
+    io:format("~s~n",[FileFullName]),
+    {ok, File} = file:open(FileFullName, [write]),
+    File.
+
+app_name(CurrentDirectory) ->
+    Filename = CurrentDirectory ++ "/config/wherl.config",
+    {ok, [PropList]} = file:consult(Filename),
+    {"app", AppName} = lists:keyfind("app", 1, PropList),
+    AppName.
+
+app_created() ->
+    CurrentDirectory = filename:dirname(escript:script_name()),
+    AppName = app_name(CurrentDirectory),
+    AppName /= "app"
