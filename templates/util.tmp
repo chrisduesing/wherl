@@ -1,0 +1,18 @@
+-module($app$_util).
+
+%% API
+-export([now_micros/0, hash/1]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+now_micros() ->
+    {Megas, Seconds, Micros} = now(),
+    (((Megas * 1000000) + Seconds) * 1000000) + Micros.
+
+hash(Object) ->    
+    Bin = term_to_binary(Object),
+    <<Sha:160/integer>> = crypto:sha(Bin),
+    Hex = lists:flatten(io_lib:format("~.16B",[Sha])),
+    list_to_binary(Hex).
+

@@ -1,1 +1,20 @@
-Hello $name$!
+-module($model$).
+
+-include_lib("$app$/include/$app$.hrl").
+
+%% API
+-export([new/$field_count$, save/1, find/1]).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+new($field_title_list$) ->
+    $Model$ = #$model${$field_record_list$},
+    Id = $app$_util:hash($Model$),
+    $Model$#$model${id=Id}.
+
+save($Model$) when is_record($Model$, $model$) ->
+    $model$_store:persist($Model$).
+
+find(Id) when is_binary(Id) ->
+    $model$_store:retrieve(Id).
