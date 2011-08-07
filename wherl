@@ -53,7 +53,7 @@ handle("generate", ["model" | Rest]) ->
 	    io:format("usage: wherl generate model <name>~n",[]);
 	false ->	
 	    [Name | Fields] = Rest,
-	    io:format("generating model ~s~n",[Name]),
+	    io:format("~ngenerating model ~s~n",[Name]),
 	    model(Name, Fields)
     end;
 
@@ -73,24 +73,24 @@ handle(_, _) ->
 %%% Template generation
 %%%===================================================================
 new_app(App, Abbrev) ->
-    {ok, ConfigFile} = create_file(lists:flatten(["config", "/", "wherl.config"])),
-    io:format("creating new app ~s~n",[App]),
-    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{app, App}])),
-    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{abbrev, Abbrev}])),
-    CurrentDirectory = filename:dirname(escript:script_name()),
-    AppDir = lists:flatten([CurrentDirectory, "/", App]),
-    file:make_dir(AppDir), 
-    io:format("creating directory:  ~s~n",[AppDir]),
-    rebar_create(App, AppDir),
+    io:format("~nwherl: creating new app ~s~n",[App]),
+    config(App, Abbrev, []),
+    create_dir(App), 
+    rebar_create(App, App),
     hrl(App),
     util(App),
-    ok.
+    rebar_compile().
+
+config(App, Abbrev, Models) ->
+    {ok, ConfigFile} = create_file("config/wherl.config"),
+    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{app, App}])),
+    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{abbrev, Abbrev}])),
+    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{models, Models}])).
 
 rebar_create(App, AppDir) ->
     os:cmd("cp rebar " ++ AppDir),
     Cmd = "cd " ++ AppDir ++ "; ./rebar create-app appid=" ++ App,
-    %%io:format("~s~n", [Cmd]),
-    os:cmd(Cmd).
+    io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 hrl(App) ->
     FileName = lists:flatten([App, "/include/", App, ".hrl"]),
@@ -103,35 +103,34 @@ model(Model, Fields) ->
     Data = template(TemplateFileName, Properties),
     FileName = lists:flatten([app_name(), "/src/", Model, ".erl"]),
     {ok, ModelFile} = create_file(FileName),
-    Result = file:write(ModelFile, Data),
+    file:write(ModelFile, Data),
     wh_record(Properties),
     store(Model, Properties),
-    io:format("~p~n", [Result]).
+    {App, Abbrev, Models} = app_props(),
+    config(App, Abbrev, [Model | Models]),
+    rebar_compile().
 
 wh_record(Properties) ->
     App = app_name(),
     TemplateFileName = "record.tmp",
     Data = template(TemplateFileName, Properties),
     HrlFileName = lists:flatten([App, "/include/", App, ".hrl"]),
-    io:format("creating file:  ~s~n",[HrlFileName]),
-    {ok, HrlFile} = file:open(HrlFileName, [write, append]),
+    {ok, HrlFile} = create_file(HrlFileName, [write, append]),
     file:write(HrlFile, Data).
 
 store(Model, Properties) ->
     TemplateFileName = "store.tmp",
     Data = template(TemplateFileName, Properties),
     FileName = lists:flatten([app_name(), "/src/", Model, "_store.erl"]),
-    io:format("creating file:  ~s~n",[FileName]),
-    {ok, File} = file:open(FileName, [write]),
+    {ok, File} = create_file(FileName),
     file:write(File, Data).
 
 util(App) ->
     Properties = [{app, App}],
     TemplateFileName = "util.tmp",
     Data = template(TemplateFileName, Properties),
-    FileName = lists:flatten([app_name(), "/src/", App, "_util.erl"]),
-    io:format("creating file:  ~s~n",[FileName]),
-    {ok, File} = file:open(FileName, [write]),
+    FileName = lists:flatten([App, "/src/", App, "_util.erl"]),
+    {ok, File} = create_file(FileName),
     file:write(File, Data).
 
 %%%===================================================================
@@ -147,26 +146,43 @@ template(TemplateFileName, Properties) ->
     sgte:render_bin(Compiled, Properties).
 
 create_file(FileNameAndPath) ->
+    create_file(FileNameAndPath, [write]).
+
+create_file(FileNameAndPath, Options) ->
     Index = string:rchr(FileNameAndPath, $/),
     Path = string:substr(FileNameAndPath, 1, Index - 1),
+    create_dir(Path),
+    CurrentDirectory = filename:dirname(escript:script_name()),
+    FullFileName = lists:flatten([CurrentDirectory, "/", FileNameAndPath]),
+    {ok, File} = file:open(FullFileName, Options),
+    io:format("writing file:  ~s~n",[FullFileName]),
+    {ok, File}.
+
+create_dir(Path) ->
     CurrentDirectory = filename:dirname(escript:script_name()),
     lists:foldl(fun(Directory, PathSoFar) -> 
 			NewDir = lists:flatten([PathSoFar, "/", Directory]),
-			file:make_dir(CurrentDirectory ++ NewDir), 
-			%%io:format("creating directory:  ~s~n",[CurrentDirectory ++ NewDir]),
+			file:make_dir(CurrentDirectory ++ NewDir), 		
 			NewDir
-		end, "", string:tokens(Path, "/ ")),
-    FullFileName = lists:flatten([CurrentDirectory, "/", FileNameAndPath]),
-    {ok, File} = file:open(FullFileName, [write]),
-    io:format("creating file:  ~s~n",[FullFileName]),
-    {ok, File}.
+		end, "", string:tokens(Path, "/ ")).
 
 app_name() ->
+    PropList = app_raw_proplist(),
+    {app, AppName} = lists:keyfind(app, 1, PropList),
+    AppName.
+
+app_props() ->
+    PropList = app_raw_proplist(),
+    {app, App} = lists:keyfind(app, 1, PropList),
+    {abbrev, Abbrev} = lists:keyfind(abbrev, 1, PropList),
+    {models, Models} = lists:keyfind(models, 1, PropList),
+    {App, Abbrev, Models}.
+
+app_raw_proplist() ->
     CurrentDirectory = filename:dirname(escript:script_name()),
     Filename = CurrentDirectory ++ "/config/wherl.config",
     {ok, PropList} = file:consult(Filename),
-    {app, AppName} = lists:keyfind(app, 1, PropList),
-    AppName.
+    PropList.
 
 app_created() ->
     CurrentDirectory = filename:dirname(escript:script_name()),
@@ -176,8 +192,7 @@ app_created() ->
 
 rebar_compile() ->
     Cmd = "cd " ++ app_name() ++ "; ./rebar compile",
-    io:format("~s~n", [Cmd]),
-    os:cmd(Cmd).
+    io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 model_properties(Model, Fields) ->
     FieldTitleList = string:sub_string(lists:flatten([ ", " ++ title(F) || F <- Fields ]), 3),
