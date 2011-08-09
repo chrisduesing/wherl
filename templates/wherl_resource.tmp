@@ -1,0 +1,131 @@
+-module(wherl_resource).
+
+-export([init/1, is_authorized/2, content_types_provided/2, allowed_methods/2, process_post/2, delete_resource/2, to_json/2, to_html/2]).
+
+-include_lib("webmachine/include/webmachine.hrl").
+-include_lib("$app$/include/$app$.hrl").
+
+-record(state, {callback, method, wherl_request}).
+
+init([Callback]) -> 
+    State = #state{callback=Callback},
+    {ok, State}.
+
+is_authorized(RequestData, #state{callback=Callback} = State) ->
+    CookieValue = wrq:get_cookie_value(?WHERL_COOKIE, RequestData),
+    SessionId = list_to_binary(CookieValue),
+    Session = wherl_session_store:get_session(SessionId),
+    Request = #wherl_request{raw=RequestData, session=Session},
+    Action = action(RequestData),
+    Response = case list_to_binary(dict:fetch(id, wrq:path_info(RequestData))) of
+		   undefined -> 
+		       Callback:authorized(Action, Request);
+		   Id -> 
+		       Callback:authorized(Action, Request#wherl_request{id=Id})
+	       end,
+    case Response of
+	true ->
+	    case Session of
+		undefined ->
+		    NewSession = wherl_session_store:new_session(),		    
+		    RequestDataWithCookie = wrq:set_resp_headers([mochiweb_cookies:cookie(?WHERL_COOKIE, NewSession#wherl_session.id, [{path, "/"}])], RequestData),
+		    UpdatedRequest = Request#wherl_request{session=NewSession},
+		    NewState = State#state{wherl_request=UpdatedRequest},
+		    {Response, RequestDataWithCookie, NewState};
+		_ ->
+		    NewState = State#state{wherl_request=Request},
+		    {Response, RequestData, NewState}
+	    end;
+	Message ->
+	    {Message, RequestData, State}
+    end.
+
+content_types_provided(RequestData, State) ->
+    {[{"application/json", to_json}, {"text/html", to_html}], RequestData, State}.
+
+allowed_methods(RequestData, State) -> 
+    Method = wrq:method(RequestData),
+    NewState = State#state{method=Method},
+    {['GET', 'POST', 'DELETE'], RequestData, NewState}.
+
+% new, index, show, edit
+to_json(RequestData, #state{callback=Callback, wherl_request=WherlRequest} = State) -> 
+    {UpdatedWherlRequest, Response} = case list_to_binary(dict:fetch(id, wrq:path_info(RequestData))) of
+			       undefined -> %new or index
+				   case new_request(RequestData) of
+				       true ->
+					   Callback:new(WherlRequest);
+				       false ->
+					   Callback:index(WherlRequest)
+				   end;
+			       Id -> %show or edit
+				   IdWherlRequest = WherlRequest#wherl_request{id=Id},
+				   case edit_request(RequestData) of
+				       true ->
+					   Callback:edit(IdWherlRequest);
+				       false ->
+					   Callback:show(IdWherlRequest)
+				   end
+			   end,
+    UpdatedSession = UpdatedWherlRequest#wherl_request.session,
+    wherl_session_store:put_session(UpdatedSession),
+    UpdatedRequestData = UpdatedWherlRequest#wherl_request.raw,
+    {Response, UpdatedRequestData, State}.
+
+to_html(RequestData, State) ->
+    {Json, _, _} = to_json(RequestData, State),
+    {Json, RequestData, State}.
+    
+% create, update
+process_post(RequestData, #state{callback=Callback, wherl_request=WherlRequest} = State) ->
+    %%RequestBody = wrq:req_body(RequestData),
+    %%JsonObject = mochijson2:decode(RequestBody),    
+    {UpdatedWherlRequest, Response} = case list_to_binary(dict:fetch(id, wrq:path_info(RequestData))) of
+				     undefined -> 
+					 Callback:create(WherlRequest);
+				     Id -> 
+					 Callback:update(WherlRequest#wherl_request{id=Id})
+				 end,
+    UpdatedRequestData = UpdatedWherlRequest#wherl_request.raw,
+    NewRequestData = wrq:append_to_response_body(Response, UpdatedRequestData),
+    {true, NewRequestData, State}.
+
+% delete
+delete_resource(RequestData, #state{callback=Callback} = State) ->
+    Id = list_to_binary(dict:fetch(id, wrq:path_info(RequestData))),
+    Callback:delete(#wherl_request{id=Id, raw=RequestData}),
+    {true, RequestData, State}.
+
+% utility functions
+action(RequestData) ->
+    case wrq:method(RequestData) of
+	'GET' ->
+	    case list_to_binary(dict:fetch(id, wrq:path_info(RequestData))) of
+		undefined ->
+		    case new_request(RequestData) of
+			true -> new;
+			false -> index
+		    end;
+		_ ->		   
+		    case edit_request(RequestData) of
+			true -> edit;
+			false -> show
+		    end
+	    end;
+	'POST' ->
+	    case list_to_binary(dict:fetch(id, wrq:path_info(RequestData))) of
+		undefined -> create;
+		_ -> update
+	    end;
+	'DELETE' ->
+	    delete
+    end.
+
+new_request(RequestData) ->
+    last_token(RequestData) == "new".
+
+edit_request(RequestData) ->
+    last_token(RequestData) == "edit".
+
+last_token(RequestData) ->
+    lists:last(wrq:path_tokens(RequestData)).

@@ -1,0 +1,46 @@
+%%% Helper class only, useful for starting application in development mode.
+%%% Use rebar to create a release when you are ready to deploy to production.
+-module($app$).
+
+-export([start/0, start_link/0, stop/0]).
+
+ensure_started(App) ->
+    case application:start(App) of
+        ok ->
+            ok;
+        {error, {already_started, App}} ->
+            ok
+    end.
+
+%% @spec start_link() -> {ok,Pid::pid()}
+%% @doc Starts the app for inclusion in a supervisor tree
+start_link() ->
+    ensure_started(crypto),
+    ensure_started(inets),
+    ensure_started(mochiweb),
+    application:set_env(webmachine, webmachine_logger_module, 
+                        webmachine_logger),
+    ensure_started(webmachine),
+    $app$_sup:start_link().
+
+%% @spec start() -> ok
+%% @doc Start the exch_webmachine server.
+start() ->
+    ensure_started(sasl),
+    ensure_started(crypto),
+    ensure_started(inets),
+    ensure_started(mochiweb),
+    application:set_env(webmachine, webmachine_logger_module, 
+                        webmachine_logger),
+    ensure_started(webmachine),
+    application:start($app$).
+
+%% @spec stop() -> ok
+%% @doc Stop the exch_webmachine server.
+stop() ->
+    Res = application:stop($app$),
+    application:stop(webmachine),
+    application:stop(mochiweb),
+    application:stop(inets),
+    application:stop(crypto),
+    Res.

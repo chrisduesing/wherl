@@ -40,9 +40,9 @@ handle("new", Args) ->
 
 handle("generate", ["controller" | Rest]) ->
     case (length(Rest) == 1) of
-	true ->
-	    Name = string:strip(Rest),
-	    io:format("generating controller ~s~n",[Name]);
+	true ->	  
+	    io:format("~ngenerating controller ~s~n",[Rest]),
+	    controller(Rest);
 	false ->	
 	    io:format("usage: wherl generate controller <name>~n",[])
     end;
@@ -76,26 +76,52 @@ new_app(App, Abbrev) ->
     io:format("~nwherl: creating new app ~s~n",[App]),
     config(App, Abbrev, []),
     create_dir(App), 
+    create_dir(App ++ "/db"),
+    create_dir(App ++ "/priv/www"),
     rebar_create(App, App),
+    supervisor(App),
+    rebar_deps(App),
     hrl(App),
     util(App),
-    rebar_compile().
+    session(App),
+    resource(App),
+    dispatch(App),
+    static(App),
+    dev(App),
+    rebar_compile(),
+    start_script(App).
 
 config(App, Abbrev, Models) ->
     {ok, ConfigFile} = create_file("config/wherl.config"),
     file:write(ConfigFile, io_lib:fwrite("~p.\n",[{app, App}])),
     file:write(ConfigFile, io_lib:fwrite("~p.\n",[{abbrev, Abbrev}])),
-    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{models, Models}])).
+    file:write(ConfigFile, io_lib:fwrite("~p.\n",[{models, Models}])),
+    file:close(ConfigFile).
 
 rebar_create(App, AppDir) ->
     os:cmd("cp rebar " ++ AppDir),
     Cmd = "cd " ++ AppDir ++ "; ./rebar create-app appid=" ++ App,
     io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
+supervisor(App) ->
+    TemplateFileName = "supervisor.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
+    FileName = lists:flatten([App, "/src/", App, "_sup.erl"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data).
+
+rebar_deps(App) ->
+    io:format("Fetching dependencies from teh interwebz, this may take a moment...~n", []),
+    os:cmd("cp templates/rebar.config " ++ App),
+    Cmd = "cd " ++ App ++ "; ./rebar get-deps",
+    io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
+
 hrl(App) ->
+    TemplateFileName = "hrl.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
     FileName = lists:flatten([App, "/include/", App, ".hrl"]),
     {ok, HrlFile} = create_file(FileName),
-    file:write(HrlFile, "").
+    file:write(HrlFile, Data).
     
 model(Model, Fields) ->
     Properties = model_properties(Model, Fields),
@@ -104,11 +130,20 @@ model(Model, Fields) ->
     FileName = lists:flatten([app_name(), "/src/", Model, ".erl"]),
     {ok, ModelFile} = create_file(FileName),
     file:write(ModelFile, Data),
-    wh_record(Properties),
-    store(Model, Properties),
     {App, Abbrev, Models} = app_props(),
     config(App, Abbrev, [Model | Models]),
+    wh_record(Properties),
+    store(Model, Properties),
     rebar_compile().
+
+controller(Controller) ->
+    Properties = controller_properties(Controller),
+    TemplateFileName = "controller.tmp",
+    Data = template(TemplateFileName, Properties),
+    FileName = lists:flatten([app_name(), "/src/", Controller, "_controller.erl"]),
+    {ok, ControllerFile} = create_file(FileName),
+    file:write(ControllerFile, Data).
+%%% Template Insertion Point - Do not delete this line!
 
 wh_record(Properties) ->
     App = app_name(),
@@ -123,7 +158,8 @@ store(Model, Properties) ->
     Data = template(TemplateFileName, Properties),
     FileName = lists:flatten([app_name(), "/src/", Model, "_store.erl"]),
     {ok, File} = create_file(FileName),
-    file:write(File, Data).
+    file:write(File, Data),
+    store_sup().
 
 util(App) ->
     Properties = [{app, App}],
@@ -132,6 +168,68 @@ util(App) ->
     FileName = lists:flatten([App, "/src/", App, "_util.erl"]),
     {ok, File} = create_file(FileName),
     file:write(File, Data).
+
+store_sup() ->
+    {_App, _Abbrev, Models} = app_props(),
+    Properties = model_sup_properties(Models),
+    TemplateFileName = "store_sup.tmp",
+    Data = template(TemplateFileName, Properties),
+    ChildSpecs = lists:foldl(fun(M, CS) -> CS ++ store_sup_child(M) end, "", Models),
+    Data2 = replace(Data, "%%% child_specs", ChildSpecs),
+    FileName = lists:flatten([app_name(), "/src/store_sup.erl"]),
+    {ok, SupFile} = create_file(FileName),
+    file:write(SupFile, Data2).
+
+store_sup_child(Model) ->
+    TemplateFileName = "store_sup_model.tmp",
+    template(TemplateFileName, [{model, Model}, {'Model', title(Model)}]).
+
+session(App) ->
+    TemplateFileName = "wherl_session_store.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
+    FileName = lists:flatten([App, "/src/wherl_session_store.erl"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data).
+
+dispatch(App) ->
+    os:cmd(lists:flatten(["cp templates/dispatch.conf ", App, "/priv/dispatch.conf"])).
+
+resource(App) ->
+    TemplateFileName = "wherl_resource.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
+    FileName = lists:flatten([App, "/src/wherl_resource.erl"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data).
+
+static(App) ->
+    TemplateFileName = "static_resource.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
+    FileName = lists:flatten([App, "/src/static_resource.erl"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data),
+    TemplateFileName2 = "index.tmp",
+    Data2 = template(TemplateFileName2, [{app, App}]),
+    FileName2 = lists:flatten([App, "/priv/www/index.html"]),
+    {ok, File2} = create_file(FileName2),
+    file:write(File2, Data2).
+
+dev(App) ->
+    TemplateFileName = "app.tmp",
+    Data = template(TemplateFileName, [{app, App}]),
+    FileName = lists:flatten([App, "/src/", App, ".erl"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data).
+
+start_script(App) ->
+    TemplateFileName = "start.tmp",
+    {ok, CurrentDirectory} = file:get_cwd(),
+    AppDir = lists:flatten([CurrentDirectory, "/", App]),
+    Data = template(TemplateFileName, [{app, App}, {app_dir, AppDir}]),
+    FileName = lists:flatten([App, "/start.sh"]),
+    {ok, File} = create_file(FileName),
+    file:write(File, Data),
+    os:cmd(lists:flatten(["chmod +x ", App, "/start.sh"])).
+
 
 %%%===================================================================
 %%% Utility functions
@@ -207,5 +305,19 @@ model_properties(Model, Fields) ->
      {field_record_list, FieldRecordList},
      {abbrev, ""}].
 
+model_sup_properties(Models) ->
+    ChildList = string:sub_string(lists:flatten([ ", " ++ title(M) || M <- Models ]), 3),
+    [{models, Models}, 
+     {app, app_name()},
+     {child_list, ChildList}].
+
+controller_properties(Controller) ->
+    [{controller, Controller}, 
+     {'Controller', title(Controller)},
+     {app, app_name()}].
+
 title([H|T]) -> 
     [string:to_upper(H)| T].
+
+replace(Original, Key, Data) ->
+    re:replace(Original, Key, Data).

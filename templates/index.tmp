@@ -1,0 +1,8 @@
+<html>
+  <head>
+    <title>Welcome to $app$</title>
+  </head>
+  <body>
+    $app$ brought to you by wherl. see <a href="http://wherl.org">wherl.org</a> for more details.
+  </body>
+</html>

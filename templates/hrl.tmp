@@ -1,0 +1,6 @@
+-define(WHERL_COOKIE, "wherl-token").
+
+-record(wherl_request, {id=undefined, session=undefined, raw}).
+
+-record(wherl_session, {id}).
+

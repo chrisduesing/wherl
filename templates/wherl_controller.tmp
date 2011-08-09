@@ -1,0 +1,39 @@
+-module(wherl_controller).
+
+%% behaviour export
+-export([behaviour_info/1]).
+
+%% api export
+-export([id/1, raw/1, request_body/1]).
+
+%% includes
+-include_lib("$app$/include/$app$.hrl").
+-include_lib("webmachine/include/webmachine.hrl").
+
+
+%%%===================================================================
+%%% behavior_info
+%%%===================================================================
+behaviour_info(callbacks) ->
+    [{new, 1}, {create, 1}, {index, 1}, {show, 1}, {edit, 1}, {update, 1}, {destroy, 1}, {authorized, 2}];
+behaviour_info(_) ->
+    undefined.
+    
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+id(Request) when is_record(Request, wherl_request) ->
+    Request#wherl_request.id.
+
+raw(Request) when is_record(Request, wherl_request) ->
+    Request#wherl_request.raw.
+
+request_body(Request) ->
+    wrq:req_body(Request#wherl_request.raw).
+
+success_json() ->
+    mochijson2:encode({struct, [{result, <<"success">>}]}).
+
+error_json(Reason) ->
+    mochijson2:encode({struct, [{result, <<"error">>}, {error, Reason}]}).

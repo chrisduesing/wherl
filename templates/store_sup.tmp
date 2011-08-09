@@ -1,10 +1,9 @@
 %%%----------------------------------------------------------------
-%%% @author  Chris Duesing <chris.duesing@gmail.com>
-%%% @doc
-%%% @end
-%%% @copyright 2011 Chris Duesing
+%%% This file is generated, any changes to this file will be overwritten.
+%%% to make changes to init config see the wherl template store_sup.tmp
+%%% keeping in mind changes could break your app.
 %%%----------------------------------------------------------------
--module($app$_store_sup).
+-module(store_sup).
 
 -behaviour(supervisor).
 
@@ -39,11 +38,12 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Restart = permanent,
-    Shutdown = 2000,
-    Type = worker,
+    Restart = permanent, % used in child specs, do not delete
+    Shutdown = 2000, % used in child specs, do not delete
+    Type = worker, % used in child specs, do not delete
 
-    $child_specs$
+    %%% do not delete following line, needed by template builder.
+    %%% child_specs
 
     {ok, {SupFlags, [$child_list$]}}.
 

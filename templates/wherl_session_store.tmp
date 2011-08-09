@@ -1,0 +1,29 @@
+-module(wherl_session_store).
+
+%% API
+-export([new_session/0, get_session/1, put_session/1]).
+
+-define(DETS_TABLE, wherl_session_store).
+
+-include_lib("$app$/include/$app$.hrl").
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+new_session() ->
+    random:seed(now()),
+    #wherl_session{id=random:uniform(1000000)}.
+
+get_session(SessionId) ->
+    dets:open_file(?DETS_TABLE, [{type, bag}]),
+    case dets:match_object(?DETS_TABLE, #wherl_session{id=SessionId, _='_'}) of
+	[Session] ->		    
+	    Session;		
+	[] ->
+	    undefined
+    end.
+
+put_session(Session) ->
+    dets:open_file(?DETS_TABLE, [{type, bag}]),
+    dets:insert(?DETS_TABLE, Session).
+    

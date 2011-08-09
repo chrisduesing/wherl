@@ -1,0 +1,42 @@
+-module($controller$_controller).
+-behaviour(wherl_controller).
+
+%% wherl callbacks
+-export([new/1, create/1, index/1, show/1, edit/1, update/1, destroy/1, authorized/2]).
+
+-include_lib("$app$/include/$app$.hrl").
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+authorized(_, _Request) ->
+    true.
+
+new(Request) ->
+    Response = wherl_controller:success_json(),
+    {Request, Response}.
+
+create(Request) ->
+    Response = wherl_controller:success_json(), 
+    {Request, Response}.
+
+index(Request) ->
+    Response = wherl_controller:success_json(), 
+    {Request, Response}.
+
+show(#wherl_request{id=Id} = Request) ->
+    Response = wherl_controller:success_json(),
+    {Request, Response}.
+
+edit(Request) ->
+    Response = wherl_controller:success_json(),
+    {Request, Response}.
+
+update(#wherl_request{id=Id} = Request) ->
+    Response = wherl_controller:success_json(),
+    {Request, Response}.
+
+destroy(Request) ->
+    Response = wherl_controller:success_json(),
+    {Request, Response}.
+

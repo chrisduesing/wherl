@@ -1,3 +1,3 @@
-$Model$Store = {$model$_store,
+$Model$ = {$model$_store,
 		  {$model$_store, start_link, []},
-		  permanent, 5000, worker, dynamic},
+		  Restart, Shutdown, Type, dynamic},
