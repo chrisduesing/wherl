@@ -3,7 +3,7 @@
 -include_lib("$app$/include/$app$.hrl").
 
 %% API
--export([new/$field_count$, save/1, find/1]).
+-export([new/$field_count$, save/1, find/1, to_json/0, to_json/1, from_json/1]).
 
 %%%===================================================================
 %%% API
@@ -18,3 +18,37 @@ save($Model$) when is_record($Model$, $model$) ->
 
 find(Id) when is_binary(Id) ->
     $model$_store:retrieve(Id).
+
+from_json(Raw) when is_binary(Raw) ->
+    from_json(mochijson2:decode(Raw));
+
+from_json({struct,[{<<"$model$">>, {struct, Properties}}]}) ->
+    from_json(Properties);
+
+from_json(Properties) when is_list(Properties) ->
+%%% model_field_props
+    new($field_title_list$).
+
+to_json() ->
+    to_json(#$model${}).
+
+to_json($Model$) when is_record($Model$, $model$) ->
+    Struct = to_struct($Model$),
+    mochijson2:encode({struct, [{<<"$model$">>, Struct}]});
+
+to_json($Model$s) when is_list($Model$s) ->
+    Structs = lists:map(fun(M) -> to_struct(M) end, $Model$s),
+    mochijson2:encode({struct, [{<<"$model$s">>, {struct, [Structs]}}]}).
+
+to_struct($Model$) when is_record($Model$, $model$) ->
+    #$model${$field_record_list$} = $Model$,
+%%% model_field_tuples
+   {struct, [$field_tuple_list$]}.
+
+get_value(Key, List) ->   
+    case lists:keyfind(Key,1,List) of
+	{_K,V}->
+	    V;
+	false->
+	    undefined
+    end.

@@ -3,6 +3,8 @@
 
 -include_lib("kernel/include/file.hrl").
 
+-define(REPLACE, "%%% Template Insertion Point - Do not delete this line!").
+
 main(Something) when is_list(Something) ->
     [Command | Args] = Something,
     case Command of
@@ -84,7 +86,7 @@ new_app(App, Abbrev) ->
     hrl(App),
     util(App),
     session(App),
-    resource(App),
+    wherl_resource(App),
     dispatch(App),
     static(App),
     dev(App),
@@ -127,14 +129,26 @@ model(Model, Fields) ->
     Properties = model_properties(Model, Fields),
     TemplateFileName = "model.tmp",
     Data = template(TemplateFileName, Properties),
+    FieldProps = lists:foldl(fun(FP, C) -> C ++ model_field_prop(FP) end, "", Fields),
+    FieldProps2 = lists:foldl(fun(FP, C) -> C ++ model_field_tuple(FP) end, "", Fields),
+    Data2 = replace(Data, "%%% model_field_props", lib:nonl(FieldProps)),
+    Data3 = replace(Data2, "%%% model_field_tuples", lib:nonl(FieldProps2)),
     FileName = lists:flatten([app_name(), "/src/", Model, ".erl"]),
     {ok, ModelFile} = create_file(FileName),
-    file:write(ModelFile, Data),
+    file:write(ModelFile, Data3),
     {App, Abbrev, Models} = app_props(),
     config(App, Abbrev, [Model | Models]),
     wh_record(Properties),
     store(Model, Properties),
     rebar_compile().
+
+model_field_prop(Field) ->
+    TemplateFileName = "model_field_prop.tmp",
+    template(TemplateFileName, [{field, Field}, {'Field', title(Field)}]).
+
+model_field_tuple(Field) ->
+    TemplateFileName = "model_field_tuple.tmp",
+    template(TemplateFileName, [{field, Field}, {'Field', title(Field)}]).
 
 controller(Controller) ->
     Properties = controller_properties(Controller),
@@ -143,7 +157,17 @@ controller(Controller) ->
     FileName = lists:flatten([app_name(), "/src/", Controller, "_controller.erl"]),
     {ok, ControllerFile} = create_file(FileName),
     file:write(ControllerFile, Data).
-%%% Template Insertion Point - Do not delete this line!
+
+
+%resource(Controller) ->
+%    FileName = App ++ "/priv/dispatch.conf",
+%    CurrentDirectory = filename:dirname(escript:script_name()),
+%    FullFileName = lists:flatten([CurrentDirectory, "/", FileNameAndPath]),
+%    {ok, Data} = file:read_file(FileName),
+%    Data2 = replace(Data, ?REPLACE, ControllerDefs ++ ?REPLACE),
+%    file:write_file(FullFileName, Data2),
+%    ok.
+
 
 wh_record(Properties) ->
     App = app_name(),
@@ -194,7 +218,7 @@ session(App) ->
 dispatch(App) ->
     os:cmd(lists:flatten(["cp templates/dispatch.conf ", App, "/priv/dispatch.conf"])).
 
-resource(App) ->
+wherl_resource(App) ->
     TemplateFileName = "wherl_resource.tmp",
     Data = template(TemplateFileName, [{app, App}]),
     FileName = lists:flatten([App, "/src/wherl_resource.erl"]),
@@ -241,7 +265,7 @@ template(TemplateFileName, Properties) ->
     true = code:add_pathz(CurrentDirectory ++ "/include/sgte/ebin/"),
     FileName = lists:flatten([CurrentDirectory, "/templates/", TemplateFileName]),
     {ok, Compiled} = sgte:compile_file(FileName),
-    sgte:render_bin(Compiled, Properties).
+    sgte:render_str(Compiled, Properties).
 
 create_file(FileNameAndPath) ->
     create_file(FileNameAndPath, [write]).
@@ -296,6 +320,7 @@ model_properties(Model, Fields) ->
     FieldTitleList = string:sub_string(lists:flatten([ ", " ++ title(F) || F <- Fields ]), 3),
     FieldRecordList = string:sub_string(lists:flatten([ ", " ++ F ++ "=" ++ title(F) || F <- Fields ]), 3),
     FieldList = string:sub_string(lists:flatten([ ", " ++ F || F <- Fields ]), 3),
+    FieldTupleList = string:sub_string(lists:flatten([ ", " ++ title(F) ++ "Tuple" || F <- Fields ]), 3),
     [{model, Model}, 
      {'Model', title(Model)},
      {app, app_name()},
@@ -303,6 +328,7 @@ model_properties(Model, Fields) ->
      {field_title_list, FieldTitleList},
      {field_list, FieldList},
      {field_record_list, FieldRecordList},
+     {field_tuple_list, FieldTupleList},
      {abbrev, ""}].
 
 model_sup_properties(Models) ->
@@ -320,4 +346,4 @@ title([H|T]) ->
     [string:to_upper(H)| T].
 
 replace(Original, Key, Data) ->
-    re:replace(Original, Key, Data).
+    re:replace(Original, Key, Data, [{return, list}, global]).

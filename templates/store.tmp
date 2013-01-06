@@ -10,7 +10,7 @@
 	 terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE). 
--define(DETS_TABLE, db/$model$_store).
+-define(DETS_TABLE, 'db/$model$_store').
 
 -include_lib("$app$/include/$app$.hrl").
 
