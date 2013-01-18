@@ -99,7 +99,7 @@ config(App, Abbrev, Models) ->
 
 rebar_create(App, AppDir) ->
     os:cmd("cp rebar " ++ AppDir),
-    Cmd = "cd " ++ AppDir ++ "; ./rebar create-app appid=" ++ App,
+    Cmd = "cd " ++ AppDir ++ "; rebar create-app appid=" ++ App,
     io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 supervisor(App) ->
@@ -112,7 +112,7 @@ supervisor(App) ->
 rebar_deps(App) ->
     io:format("Fetching dependencies from teh interwebz, this may take a moment...~n", []),
     os:cmd("cp templates/rebar.config " ++ App),
-    Cmd = "cd " ++ App ++ "; ./rebar get-deps",
+    Cmd = "cd " ++ App ++ "; rebar get-deps",
     io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 hrl(App) ->
@@ -310,7 +310,7 @@ app_created() ->
     Result == ok.
 
 rebar_compile() ->
-    Cmd = "cd " ++ app_name() ++ "; ./rebar compile",
+    Cmd = "cd " ++ app_name() ++ "; rebar compile",
     io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 model_properties(Model, Fields) ->
