@@ -44,13 +44,13 @@ handle_generate(["controller" | Controller]) when length(Controller) == 1 ->
 handle_generate(["controller" | _]) ->
     io:format("usage: wherl generate controller <name>~n",[]);
 
-handle_generate(["model" | Model]) when length(Model) >= 1 ->
+handle_generate(["model" | Model]) when length(Model) >= 2 ->
     [Name | Fields] = Model,
     io:format("~ngenerating model ~s~n",[Name]),
     model(Name, Fields);
 
 handle_generate(["model" | _]) ->
-    io:format("usage: wherl generate model <name>~n",[]);
+    io:format("usage: wherl generate model <name> [<field>]~n",[]);
 
 % modify to take model fields
 handle_generate(["scaffold" | Rest]) ->
@@ -98,22 +98,26 @@ config(App, Abbrev, Models) ->
     file:close(ConfigFile).
 
 rebar_create(App, AppDir) ->
-    os:cmd("cp rebar " ++ AppDir),
     Cmd = "cd " ++ AppDir ++ "; rebar create-app appid=" ++ App,
+    %io:format("~s~n", [Cmd]),
     io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
 
 supervisor(App) ->
     TemplateFileName = "supervisor.tmp",
     Data = template(TemplateFileName, [{app, App}]),
     FileName = lists:flatten([App, "/src/", App, "_sup.erl"]),
+    %io:format("~s~n", [FileName]),
     {ok, File} = create_file(FileName),
     file:write(File, Data).
 
 rebar_deps(App) ->
     io:format("Fetching dependencies from teh interwebz, this may take a moment...~n", []),
-    os:cmd("cp templates/rebar.config " ++ App),
-    Cmd = "cd " ++ App ++ "; rebar get-deps",
-    io:format("rebar:~n~s~n", [os:cmd(Cmd)]).
+    Cmd1 = "cp templates/rebar.config " ++ App,
+    %io:format("** ~s~n", [Cmd1]),
+    os:cmd(Cmd1),
+    Cmd2 = "cd " ++ App ++ "; rebar get-deps",
+    %io:format("** ~s~n", [Cmd2]),
+    io:format("rebar:~n~s~n", [os:cmd(Cmd2)]).
 
 hrl(App) ->
     TemplateFileName = "hrl.tmp",
@@ -259,7 +263,7 @@ start_script(App) ->
 
 template(TemplateFileName, Properties) ->
     CurrentDirectory = filename:dirname(escript:script_name()),
-    true = code:add_pathz(CurrentDirectory ++ "/include/sgte/ebin/"),
+    true = code:add_pathz(CurrentDirectory ++ "/deps/sgte/ebin/"),
     FileName = lists:flatten([CurrentDirectory, "/templates/", TemplateFileName]),
     {ok, Compiled} = sgte:compile_file(FileName),
     sgte:render_str(Compiled, Properties).
@@ -270,9 +274,11 @@ create_file(FileNameAndPath) ->
 create_file(FileNameAndPath, Options) ->
     Index = string:rchr(FileNameAndPath, $/),
     Path = string:substr(FileNameAndPath, 1, Index - 1),
+    %io:format("creating path ~s~n", [Path]),
     create_dir(Path),
     CurrentDirectory = filename:dirname(escript:script_name()),
     FullFileName = lists:flatten([CurrentDirectory, "/", FileNameAndPath]),
+    %io:format("creating file ~s~n", [FullFileName]),
     {ok, File} = file:open(FullFileName, Options),
     io:format("writing file:  ~s~n",[FullFileName]),
     {ok, File}.
